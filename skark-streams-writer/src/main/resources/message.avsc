@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "namespace": "com.example.demo.dto",
+  "name": "Message",
+  "doc": "Messages from Kafka",
+  "fields":
+  [
+    {
+      "name": "id",
+      "type": ["null", "long"]
+    },
+    {
+      "name": "link",
+      "type": ["null", "string"]
+    },
+    {
+      "name": "hashtag",
+      "type": ["null", "string"]
+    },
+    {
+      "name": "text",
+      "type": ["null", "string"]
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+plugins {
+    id 'java'
+    id 'java-library'
+    id 'application'
+}
+
+group = 'com.example'
+version = '1.0.0'
+sourceCompatibility = '8'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+
+    compileOnly 'org.apache.spark:spark-core_2.12:3.0.1'
+    compileOnly 'org.apache.spark:spark-sql_2.12:3.0.1'
+    compileOnly 'org.apache.spark:spark-streaming_2.12:3.0.1'
+    compileOnly 'org.projectlombok:lombok:1.18.16'
+
+
+    api 'org.apache.spark:spark-streaming-kafka-0-10_2.12:3.0.1'
+    api 'org.mongodb.spark:mongo-spark-connector_2.12:3.0.1'
+    api 'org.apache.avro:avro:1.8.2'
+    api 'org.slf4j:slf4j-api:1.7.30'
+    api 'org.slf4j:slf4j-log4j12:1.7.30'
+    api 'log4j:log4j:1.2.17'
+
+    testImplementation 'org.apache.spark:spark-core_2.12:3.0.1'
+    testImplementation 'org.apache.spark:spark-sql_2.12:3.0.1'
+    testImplementation 'org.apache.spark:spark-streaming_2.12:3.0.1'
+    testImplementation 'org.mongodb.spark:mongo-spark-connector_2.12:3.0.1'
+
+    testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.10.0'
+    testImplementation 'org.mockito:mockito-inline:3.7.7'
+    testImplementation 'org.mockito:mockito-junit-jupiter:3.7.7'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.3.1'
+    testImplementation 'org.awaitility:awaitility:4.0.3'
+    testImplementation 'de.flapdoodle.embed:de.flapdoodle.embed.mongo:3.0.0'
+
+    testCompileOnly 'org.projectlombok:lombok:1.18.16'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.3.1'
+
+    annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.18'
+    testAnnotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.18'
+
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': '$mainClassName'
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

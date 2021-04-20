@@ -1,0 +1,454 @@
+---
+
+
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Stop running containers
+      docker_container:
+        name: "{{ item }}"
+        state: absent
+      with_items:
+      - demo_generator1
+      - demo_generator2
+      - spark_worker1
+      - spark_worker2
+      - spark_master
+      - hadoop_datanode1
+      - hadoop_datanode2
+      - hadoop_datanode3
+      - hadoop_nodemanager1
+      - hadoop_nodemanager2
+      - hadoop_nodemanager3
+      - hadoop_resourcemanager
+      - hadoop_historyserver
+      - hadoop_namenode
+      - kafdrop
+      - kafka1
+      - kafka2
+      - zookeeper
+      - mongo1
+      - mongo2
+  tags:
+    - remove-containers
+
+- name: setup network
+  hosts: localhost
+  tasks:  
+    - name: Create a network
+      community.general.docker_network:
+        name: demo-net
+        enable_ipv6: no
+        ipam_config:
+          - subnet: "10.0.0.0/16"
+            gateway: "10.0.0.1"
+  tags:
+    - network
+
+
+- name: setup kafka
+  hosts: localhost
+  module_defaults:
+    community.general.docker_container:
+      container_default_behavior: compatibility
+      networks_cli_compatible: yes
+      network_mode: bridge
+      #auto_remove: "yes"
+  tasks:
+    - name: deploy docker zookeeper
+      community.general.docker_container:
+        name: "{{ hostvars.zookeeper.inventory_hostname }}"
+        image: bitnami/zookeeper:3.5.7
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.zookeeper.static_ip }}"
+            aliases:
+              - zookeeper-intra
+        published_ports: 2181:2181
+        env:
+            ALLOW_ANONYMOUS_LOGIN: "yes"
+        
+    - name: deploy docker kafka
+      community.general.docker_container:
+        name: "{{ hostvars.kafka1.inventory_hostname }}"
+        image: bitnami/kafka:2.5.0
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.kafka1.static_ip }}"
+            aliases:
+              - kafka-intra
+        published_ports: 
+          - "9092:9092"
+          - "9093:9093"
+        env:
+          ALLOW_PLAINTEXT_LISTENER: "yes"
+          KAFKA_CFG_ZOOKEEPER_CONNECT: "zookeeper-intra:2181"
+          KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+          KAFKA_CFG_LISTENERS: "CLIENT://:9092,EXTERNAL://:9093"
+          KAFKA_CFG_ADVERTISED_LISTENERS: "CLIENT://kafka-intra:9092,EXTERNAL://localhost:9093"
+          KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "CLIENT"
+          KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+          KAFKA_CFG_LOG_RETENTION_BYTES: "52428800"
+          KAFKA_CFG_LOG_RETENTION_CHECK_INTERVALS_MS: "20000"
+          KAFKA_CFG_LOG_RETENTION_HOURS: "1"
+          KAFKA_CFG_SEGMENT_BYTES: "1048576"
+          KAFKA_CFG_SEGMENT_DELAY_MS: "5000"
+          
+     
+    - name: deploy docker kafdrop
+      community.general.docker_container:
+        name: "{{ hostvars.kafdrop.inventory_hostname }}"
+        image: obsidiandynamics/kafdrop
+        container_default_behavior: compatibility
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.kafdrop.static_ip }}"
+        published_ports: "9001:9001"
+        env:
+          SERVER_PORT: "9001"
+          KAFKA_BROKERCONNECT: "kafka-intra:9092"
+          JVM_OPTS: "-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"     
+  tags:
+    - kafka
+
+
+- name: setup mongo
+  hosts: localhost
+  tasks:
+    - name: deploy docker mongo
+      community.general.docker_container:
+        name: "{{ hostvars.mongo1.inventory_hostname }}"
+        image: mongo:latest
+        command: "mongod --bind_ip 127.0.0.1,{{ hostvars.mongo1.static_ip }}"
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.mongo1.static_ip }}"
+            aliases:
+              - mongo-intra
+        published_ports: 27017:27017        
+        container_default_behavior: compatibility
+        networks_cli_compatible: yes
+        network_mode: bridge
+        #auto_remove: "yes"
+            
+    - name: add mongo user
+      community.mongodb.mongodb_user:
+        login_host: "{{ hostvars.mongo1.static_ip }}"
+        login_port: 27017
+        database: admin
+        name: admin
+        password: "12345"
+        state: present
+        roles: root
+  tags:
+    - mongo
+
+
+- name: setup application (demo-generator)
+  hosts: localhost
+  module_defaults:
+    community.general.docker_container:
+      container_default_behavior: compatibility
+      networks_cli_compatible: yes
+      network_mode: bridge
+#      auto_remove: "yes"
+  tasks:
+    - name: deploy docker application
+      community.general.docker_container:
+        name: "{{ hostvars[item].inventory_hostname }}"
+        image: demo-generator:latest
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars[item].static_ip }}"
+            aliases:
+              - "{{ hostvars[item].inventory_hostname }}-intra"
+#        published_ports: 8080:8080
+        env: 
+          SPRING_PROFILES_ACTIVE: "production"
+      loop: "{{ groups['generators'] }}"
+  tags:
+    - app
+
+
+- name: setup hadoop namenode
+  hosts: localhost
+  module_defaults:
+    community.general.docker_container:
+      container_default_behavior: compatibility
+      networks_cli_compatible: yes
+      network_mode: bridge
+#      auto_remove: "yes"
+      env_file: hadoop.env
+      keep_volumes: false
+  tasks:
+    - name: deploy docker hadoop namenode
+      community.general.docker_container:
+        name: "{{ hostvars.hadoop_namenode.inventory_hostname }}"
+        image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+        volumes:
+          - hadoop_namenode:/hadoop/dfs/name
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.hadoop_namenode.static_ip }}"
+            aliases:
+              - hadoop-namenode-intra
+        published_ports:
+          - 9870:9870
+          - 9000:9000
+        env:
+          CLUSTER_NAME: demo-cluster
+    - name: hadoop namenode install python
+      command: docker exec {{ hostvars.hadoop_namenode.inventory_hostname }} bash -c 'apt update && apt install -y python3'
+  tags:
+    - hadoop-namenode
+
+- name: hadoop namenode leave safemode
+  hosts: hadoop_namenode
+  tasks:
+    - name: leave safemode
+      shell: |
+        /opt/hadoop-3.2.1/bin/hdfs fsck / -delete 
+        /opt/hadoop-3.2.1/bin/hdfs dfsadmin -safemode leave
+  tags:
+    - hadoop-namenode
+
+- name: setup hadoop
+  hosts: localhost
+  module_defaults:
+    community.general.docker_container:
+      container_default_behavior: compatibility
+      networks_cli_compatible: yes
+      network_mode: bridge
+#      auto_remove: "yes"
+      env_file: hadoop.env
+      keep_volumes: false
+  tasks:
+    - name: deploy docker hadoop datanode
+      community.general.docker_container:
+        name: "{{ hostvars.hadoop_datanode1.inventory_hostname }}"
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        volumes:
+          - hadoop_datanode1:/hadoop/dfs/data
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.hadoop_datanode1.static_ip }}"
+            aliases:
+              - hadoop-datanode1-intra
+
+    - name: deploy docker hadoop resourcemanager
+      community.general.docker_container:
+        name: "{{ hostvars.hadoop_resourcemanager.inventory_hostname }}"
+        image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.hadoop_resourcemanager.static_ip }}"
+            aliases:
+              - hadoop-resourcemanager-intra
+      tags:
+        - hadoop-resourcemanager
+
+    - name: deploy docker hadoop worker nodes
+      community.general.docker_container:
+        name: "{{ hostvars[item].inventory_hostname }}"
+        image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars[item].static_ip }}"
+            aliases:
+              - "{{ hostvars[item].inventory_hostname }}-intra"
+      loop: "{{ groups['hadoop_worker_nodes'] }}"
+
+    - name: hadoop worker nodes install python
+      command: docker exec {{ hostvars[item].inventory_hostname }} bash -c 'apt update && apt install -y python3 && ln -sf /usr/bin/python3 /usr/bin/python'
+      loop: "{{ groups['hadoop_worker_nodes'] }}"
+
+    - name: deploy docker hadoop historyserver
+      community.general.docker_container:
+        name: "{{ hostvars.hadoop_historyserver.inventory_hostname }}"
+        image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+        volumes:
+          - hadoop_historyserver:/hadoop/yarn/timeline
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.hadoop_historyserver.static_ip }}"
+            aliases:
+              - hadoop-historyserver-intra
+        published_ports:
+          - 8188:8188
+          - 10200:10200
+  tags:
+    - hadoop
+
+
+- name: copy files for mapreduce
+  hosts: localhost
+  tasks:
+    - name: copy mapper and reducer
+      shell: |
+        docker cp mapper.py {{ hostvars.hadoop_namenode.inventory_hostname }}:mapper.py
+        docker cp reducer.py {{ hostvars.hadoop_namenode.inventory_hostname }}:reducer.py
+  tags:
+    - hadoop-test-mapreduce
+
+- name: test mapreduce
+  hosts: hadoop_namenode
+  tasks:
+    - name: create hdfs input
+      shell: |
+        mkdir -p /input
+        echo "Hello World" >| /input/f1.txt
+        echo "Hello Docker" >| /input/f2.txt
+        echo "Hello Hadoop" >| /input/f3.txt
+        echo "Hello MapReduce" >| /input/f4.txt
+        hdfs dfs -mkdir -p /user/root/input
+        hdfs dfs -copyFromLocal -f /input /user/root
+        hdfs dfs -rm -r -f /user/root/output 
+        
+
+    - name: mapreduce
+      command: mapred streaming -files 'mapper.py,reducer.py' -mapper mapper.py -reducer reducer.py -input '/user/root/input' -output '/user/root/output'
+
+    - name: get result
+      command: hdfs dfs -cat /user/root/output/*
+      register: result
+
+    - name: show result
+      debug: var=result.stdout_lines
+
+  tags:
+    - hadoop-test-mapreduce
+
+
+- name: setup spark
+  hosts: localhost
+  module_defaults:
+    community.general.docker_container:
+      container_default_behavior: compatibility
+      networks_cli_compatible: yes
+      network_mode: bridge
+      purge_networks: yes
+#      auto_remove: "yes"
+  tasks:
+    - name: deploy docker spark master
+      community.general.docker_container:
+        name: "{{ hostvars.spark_master.inventory_hostname }}"
+        image: bitnami/spark:3.0.1
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.spark_master.static_ip }}"
+            aliases:
+              - spark-master-intra
+              - spark-master
+        published_ports:
+          - 7077:7077
+          - 8080:8080
+          - 4040:4040
+        env:
+          SPARK_MODE: master
+          SPARK_DIST_CLASSPATH: /spark/jars/hadoop-hdfs-client-3.2.0.jar
+          SPARK_MASTER_HOST: "spark-master-intra"
+    - name: spark master install python
+      command: docker exec {{ hostvars.hadoop_namenode.inventory_hostname }} bash -c 'apt update && apt install -y python3'
+      
+    - name: spark master install python
+      command: docker exec {{ hostvars.hadoop_namenode.inventory_hostname }} bash -c 'apt update && apt install -y python3'
+          
+    - name: deploy docker spark slave 1
+      community.general.docker_container:
+        name: "{{ hostvars.spark_worker1.inventory_hostname }}"
+        image: bitnami/spark:3.0.1
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.spark_worker1.static_ip }}"
+            aliases:
+              - spark-worker1-intra
+        published_ports:
+          - 8081:8081
+          - 4041:4040
+        env:
+          SPARK_MODE: worker
+          SPARK_MASTER_URL: "spark://{{ hostvars.spark_master.static_ip }}:7077"
+          SPARK_PUBLIC_DNS: "{{ hostvars.spark_worker1.inventory_hostname }}"
+
+    - name: deploy docker spark slave 2
+      community.general.docker_container:
+        name: "{{ hostvars.spark_worker2.inventory_hostname }}"
+        image: bitnami/spark:3.0.1
+        networks:
+          - name: demo-net
+            ipv4_address: "{{ hostvars.spark_worker2.static_ip }}"
+            aliases:
+              - spark-worker2-intra
+        published_ports:
+          - 8082:8081
+          - 4042:4040
+        env:
+          SPARK_MODE: worker
+          SPARK_MASTER_URL: "spark://{{ hostvars.spark_master.static_ip }}:7077"
+          SPARK_PUBLIC_DNS: "{{ hostvars.spark_worker2.inventory_hostname }}"
+          
+
+  tags:
+    - spark-setup
+
+
+- name: spark setup submit
+  hosts: localhost
+  tasks:
+    - name: copy app docker
+      shell: |
+        docker cp ../skark-streams-writer/build/libs/spark-streams-writer-1.0.0.jar hadoop_namenode:writer.jar
+        docker cp log4j-spark.properties hadoop_namenode:log4j-spark.properties
+        docker cp log4j-spark.properties spark_master:log4j-spark.properties
+        docker cp log4j-spark.properties spark_worker1:log4j-spark.properties
+        docker cp log4j-spark.properties spark_worker2:log4j-spark.properties
+  tags:
+    - spark-stream
+        
+- name: spark setup submit 
+  hosts: hadoop_namenode
+  tasks:
+    - name: copy app hdfs
+      shell: |
+        hdfs dfs -copyFromLocal -f writer.jar /user/root/writer.jar
+        hdfs dfs -copyFromLocal -f log4j-spark.properties /user/root/log4j-spark.properties
+        hdfs dfs -mkdir -p /user/root/checkpoint
+        hdfs dfs -mkdir -p /user/root/eventlog
+        hdfs dfs -mkdir -p /user/root/avro
+  tags:
+    - spark-stream
+
+
+- name: setup spark
+  hosts: spark_master
+  tasks:
+    - name: submit
+      shell: |
+        /opt/bitnami/spark/bin/spark-submit \
+        --class com.example.demo.SparkStreamWriter \
+        --master spark://{{ hostvars.spark_master.static_ip }}:7077 \
+        --executor-memory 1G \
+        --total-executor-cores 8 \
+        --num-executors 2 \
+        --files hdfs://hadoop-namenode-intra:9000/user/root/log4j-spark.properties \
+        --conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=file:/log4j-spark.properties" \
+        --conf "spark.executor.extraJavaOptions=-Dlog4j.configuration=file:/log4j-spark.properties" \
+        --conf "spark.eventLog.dir=hdfs://hadoop-namenode-intra:9000/user/root/eventlog" \
+        --conf "spark.eventLog.enabled=true" \
+        --conf "spark.mongodb.input.uri=mongodb://admin:12345@{{hostvars.mongo1.static_ip}}:27017/admin.hashtag_ratings" \
+        --conf "spark.mongodb.output.uri=mongodb://admin:12345@{{hostvars.mongo1.static_ip}}:27017/admin.hashtag_ratings" \
+        --conf "spark.streaming.checkpoint.dir=hdfs://hadoop-namenode-intra:9000/user/root/checkpoint" \
+        --conf "spark.streaming.kafka.address={{ hostvars.kafka1.static_ip }}:9092" \
+        --conf "spark.streaming.kafka.topic.name=demo-topic" \
+        --conf "spark.streaming.avro.path=hdfs://hadoop-namenode-intra:9000/user/root/avro/message" \
+        --conf "spark.streaming.rate=10" \
+        --conf "spark.streaming.window.width=30" \
+        --conf "spark.streaming.window.rate=10" \
+        --conf "spark.app.hashtag.length.max=5" \
+        --conf "spark.app.hashtag.count.min=2" \
+        hdfs://hadoop-namenode-intra:9000/user/root/writer.jar &> /opt/bitnami/spark/logs/submit.log
+      register: spark_output
+    - debug:
+        msg: "{{ spark_output.stdout_lines }}"
+  tags:
+    - spark-stream

@@ -1,0 +1,11 @@
+# file: group_vars/all
+ansible_connection: docker
+ansible_python_interpreter: "python3"
+
+
+module_defaults:
+  community.general.docker_container:
+    container_default_behavior: compatibility
+    networks_cli_compatible: yes
+    network_mode: bridge
+#    auto_remove: "yes"

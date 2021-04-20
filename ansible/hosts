@@ -1,0 +1,61 @@
+all:
+  hosts:
+    zookeeper:
+      static_ip: "10.0.1.2"
+    hadoop_namenode:
+      static_ip: "10.0.1.3"
+    hadoop_resourcemanager:
+      static_ip: "10.0.1.4"
+    hadoop_historyserver:
+      static_ip: "10.0.1.5"
+    kafdrop:
+      static_ip: "10.0.1.6"
+    spark_master:
+      static_ip: "10.0.1.7"
+    
+  children:
+    kafka:
+      hosts:
+        kafka1:
+          static_ip: "10.0.2.1"
+        kafka2:
+          static_ip: "10.0.2.2"
+    
+    mongo:
+      hosts:
+        mongo1:
+          static_ip: "10.0.5.1"
+        mongo2:
+          static_ip: "10.0.5.2"
+    
+    hadoop_data_nodes:
+      hosts:
+        hadoop_datanode1:
+          static_ip: "10.0.3.1"
+        hadoop_datanode2:
+          static_ip: "10.0.3.2"
+        hadoop_datanode3:
+          static_ip: "10.0.3.3"
+    
+    hadoop_worker_nodes:
+      hosts:
+        hadoop_nodemanager1:
+          static_ip: "10.0.4.1"
+        hadoop_nodemanager2:
+          static_ip: "10.0.4.2"
+        hadoop_nodemanager3:
+          static_ip: "10.0.4.3"
+    
+    generators:
+      hosts:
+        demo_generator1:
+          static_ip: "10.0.6.1"
+        demo_generator2:
+          static_ip: "10.0.6.2"
+    
+    spark_worker_nodes:
+      hosts:
+        spark_worker1:
+          static_ip: "10.0.7.1"
+        spark_worker2:
+          static_ip: "10.0.7.2"

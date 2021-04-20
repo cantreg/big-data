@@ -1,0 +1,23 @@
+spring:
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    topic:
+      demo:
+        name: "demo-topic"
+  profiles:
+    active: development
+
+
+---
+spring:
+  profiles: development
+  kafka:
+     bootstrap-servers: localhost:9093
+
+---
+spring:
+  profiles: production
+  kafka:
+    bootstrap-servers: kafka-intra:9092
