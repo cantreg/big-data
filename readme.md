@@ -1,8 +1,9 @@
 # Big Data Demo Application
-
-* **Ansible** and **Docker** images -based self-deployable/runnable app.
-* **Hadoop MapReduce** Python task.
-* **Spark Streaming** Java jobs.
+Generates messages, puts to queue, pulls and aggregates them by time-window, writes on-disk and in db.  
+Content:  
+* **Ansible** and **Docker** images -based self-deploy/run script.
+* **Hadoop MapReduce** Python test task.
+* **Spark Streaming** Java job and test.
 * **Kafka** queue and Kafdrop for monitoring.
 * **MongoDB** as storage. 
 * **Avro** schema for source data on-disk storage (not for kafka by now). 
