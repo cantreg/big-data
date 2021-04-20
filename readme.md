@@ -2,7 +2,7 @@
 
 * **Ansible** and **Docker** images -based self-deployable/runnable app.
 * **Hadoop MapReduce** Python task.
-* **Spark Streams** Java jobs.
+* **Spark Streaming** Java jobs.
 * **Kafka** queue and Kafdrop for monitoring.
 * **MongoDB** as storage. 
 * **Avro** schema for source data on-disk storage (not for kafka by now). 
